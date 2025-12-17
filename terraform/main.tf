@@ -1,6 +1,12 @@
 terraform {
   required_version = ">= 1.0"
 
+  backend "s3" {
+    bucket = "skynet-tf-state-prod"
+    key    = "ses-contact-form/terraform.tfstate"
+    region = "us-west-2"
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"

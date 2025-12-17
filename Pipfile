@@ -1,0 +1,20 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+boto3 = "*"
+click = "*"
+rich = "*"
+
+[dev-packages]
+pytest = "*"
+pytest-cov = "*"
+moto = {extras = ["ses", "route53"], version = "*"}
+flake8 = "*"
+mypy = "*"
+boto3-stubs = {extras = ["ses", "route53"], version = "*"}
+
+[requires]
+python_version = "3.14"
