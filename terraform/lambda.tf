@@ -16,6 +16,10 @@ resource "aws_lambda_function" "send_email" {
   timeout          = 10
   memory_size      = 128
 
+  # Limit concurrent executions to prevent runaway costs and protect
+  # account-wide Lambda concurrency for other functions
+  reserved_concurrent_executions = 10
+
   environment {
     variables = {
       SENDER_EMAIL    = var.sender_email

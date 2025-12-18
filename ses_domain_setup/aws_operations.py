@@ -4,7 +4,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -19,7 +19,7 @@ class AWSOperationError(Exception):
 
 
 def retry_with_backoff(
-    func: callable,
+    func: Callable[[], Any],
     max_retries: int = 3,
     base_delay: float = 1.0,
     max_delay: float = 30.0,
