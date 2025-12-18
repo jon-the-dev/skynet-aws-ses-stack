@@ -34,3 +34,6 @@ provider "aws" {
 locals {
   function_name = "${var.project_name}-${var.environment}"
 }
+
+# Get current AWS account ID for IAM policy scoping
+data "aws_caller_identity" "current" {}

@@ -33,7 +33,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "from_email": "Sender's email for reply-to (optional)"
     }
     """
-    logger.info(f"Received event: {json.dumps(event)}")
+    # Log only non-sensitive metadata, not the full event body
+    logger.info(
+        f"Request received: method={event.get('httpMethod', 'N/A')}, "
+        f"path={event.get('path', 'N/A')}, "
+        f"requestId={event.get('requestContext', {}).get('requestId', 'N/A')}"
+    )
 
     # Parse request body
     try:

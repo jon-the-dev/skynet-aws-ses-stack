@@ -49,7 +49,7 @@ resource "aws_iam_role_policy" "ses_send" {
           StringLike = {
             "ses:FromAddress" = "*@${var.sender_domain}"
           }
-        } : {
+          } : {
           StringEquals = {
             "ses:FromAddress" = var.sender_email
           }

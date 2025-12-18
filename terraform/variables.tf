@@ -31,5 +31,5 @@ variable "environment" {
 variable "allowed_origins" {
   description = "CORS allowed origins for API Gateway"
   type        = list(string)
-  default     = ["*"]
+  default     = ["https://team-skynet.io", "https://www.team-skynet.io"]
 }

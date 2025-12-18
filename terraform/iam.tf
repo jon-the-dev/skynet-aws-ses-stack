@@ -16,7 +16,7 @@ resource "aws_iam_role" "lambda_role" {
   })
 }
 
-# Policy for SES SendEmail
+# Policy for SES SendEmail - scoped to specific identity ARN
 resource "aws_iam_role_policy" "ses_send" {
   name = "${local.function_name}-ses-send"
   role = aws_iam_role.lambda_role.id
@@ -30,7 +30,8 @@ resource "aws_iam_role_policy" "ses_send" {
           "ses:SendEmail",
           "ses:SendRawEmail"
         ]
-        Resource = "*"
+        # Scoped to specific SES identity ARN for least privilege
+        Resource = "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/${var.sender_email}"
         Condition = {
           StringEquals = {
             "ses:FromAddress" = var.sender_email
