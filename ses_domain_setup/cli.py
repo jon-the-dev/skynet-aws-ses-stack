@@ -205,6 +205,8 @@ def _run_setup(
         "dkim_ok": sum(1 for d in report.domains if d.dkim.status.value == "success"),
         "spf_ok": sum(1 for d in report.domains if d.spf.status.value == "success"),
         "dmarc_ok": sum(1 for d in report.domains if d.dmarc.status.value == "success"),
+        "mx_ok": sum(1 for d in report.domains if d.mx.status.value == "success"),
+        "mx_gmail": sum(1 for d in report.domains if d.mx.has_gmail),
         "total_findings": len(report.findings),
     }
 

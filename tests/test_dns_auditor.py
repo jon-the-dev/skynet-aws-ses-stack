@@ -1,9 +1,11 @@
 """Tests for DNS auditing functionality."""
 
 from ses_domain_setup.dns_auditor import (
+    GMAIL_MX_SERVERS,
     GOOGLE_SPF_INCLUDE,
     SES_SPF_INCLUDE,
     audit_dmarc_record,
+    audit_mx_record,
     audit_spf_record,
     generate_suggested_dmarc,
     parse_spf_record,
@@ -246,3 +248,126 @@ class TestGenerateSuggestedDMARC:
         assert "v=DMARC1" in result
         assert "p=quarantine" in result
         assert "security@example.com" in result
+
+
+class TestAuditMXRecord:
+    """Tests for MX record auditing."""
+
+    def test_audit_missing_mx(self):
+        """Test auditing when no MX records exist."""
+        records = [
+            {"Type": "A", "Name": "example.com.", "ResourceRecords": [{"Value": "1.2.3.4"}]},
+        ]
+
+        result = audit_mx_record(records, "example.com")
+
+        assert not result.exists
+        assert result.status == Status.MISSING
+        assert not result.has_gmail
+        assert result.mx_records == []
+
+    def test_audit_gmail_mx_complete(self):
+        """Test auditing complete Gmail MX configuration."""
+        records = [
+            {
+                "Type": "MX",
+                "Name": "example.com.",
+                "ResourceRecords": [
+                    {"Value": "1 aspmx.l.google.com."},
+                    {"Value": "5 alt1.aspmx.l.google.com."},
+                    {"Value": "5 alt2.aspmx.l.google.com."},
+                    {"Value": "10 alt3.aspmx.l.google.com."},
+                    {"Value": "10 alt4.aspmx.l.google.com."},
+                ],
+            },
+        ]
+
+        result = audit_mx_record(records, "example.com")
+
+        assert result.exists
+        assert result.has_gmail
+        assert result.status == Status.SUCCESS
+        assert len(result.mx_records) == 5
+        assert "aspmx.l.google.com" in result.mx_records
+
+    def test_audit_gmail_mx_partial(self):
+        """Test auditing partial Gmail MX configuration (warning)."""
+        records = [
+            {
+                "Type": "MX",
+                "Name": "example.com.",
+                "ResourceRecords": [
+                    {"Value": "10 alt3.aspmx.l.google.com."},
+                ],
+            },
+        ]
+
+        result = audit_mx_record(records, "example.com")
+
+        assert result.exists
+        assert result.has_gmail
+        assert result.status == Status.WARNING
+        assert len(result.mx_records) == 1
+
+    def test_audit_non_gmail_mx(self):
+        """Test auditing non-Gmail MX records."""
+        records = [
+            {
+                "Type": "MX",
+                "Name": "example.com.",
+                "ResourceRecords": [
+                    {"Value": "10 mail.example.com."},
+                    {"Value": "20 mail2.example.com."},
+                ],
+            },
+        ]
+
+        result = audit_mx_record(records, "example.com")
+
+        assert result.exists
+        assert not result.has_gmail
+        assert result.status == Status.SUCCESS
+        assert len(result.mx_records) == 2
+        assert "mail.example.com" in result.mx_records
+
+    def test_audit_mx_other_provider(self):
+        """Test auditing MX records from another provider (e.g., Microsoft 365)."""
+        records = [
+            {
+                "Type": "MX",
+                "Name": "example.com.",
+                "ResourceRecords": [
+                    {"Value": "0 example-com.mail.protection.outlook.com."},
+                ],
+            },
+        ]
+
+        result = audit_mx_record(records, "example.com")
+
+        assert result.exists
+        assert not result.has_gmail
+        assert result.status == Status.SUCCESS
+        assert "example-com.mail.protection.outlook.com" in result.mx_records
+
+    def test_audit_mx_subdomain_ignored(self):
+        """Test that MX records for subdomains are ignored."""
+        records = [
+            {
+                "Type": "MX",
+                "Name": "mail.example.com.",
+                "ResourceRecords": [
+                    {"Value": "10 mx.example.com."},
+                ],
+            },
+        ]
+
+        result = audit_mx_record(records, "example.com")
+
+        assert not result.exists
+        assert result.status == Status.MISSING
+
+    def test_gmail_mx_servers_constant(self):
+        """Test that GMAIL_MX_SERVERS contains expected servers."""
+        assert "aspmx.l.google.com" in GMAIL_MX_SERVERS
+        assert "alt1.aspmx.l.google.com" in GMAIL_MX_SERVERS
+        assert len(GMAIL_MX_SERVERS) == 5

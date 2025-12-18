@@ -76,6 +76,7 @@ def create_summary_table(domains: list[DomainStatus]) -> Table:
     table.add_column("DKIM", justify="center")
     table.add_column("SPF", justify="center")
     table.add_column("DMARC", justify="center")
+    table.add_column("MX", justify="center")
 
     for domain in domains:
         # SES Verification
@@ -126,12 +127,30 @@ def create_summary_table(domains: list[DomainStatus]) -> Table:
                 style=status_color(domain.dmarc.status),
             )
 
+        # MX
+        mx_cell = Text()
+        mx_cell.append(status_icon(domain.mx.status) + " ")
+        if domain.mx.exists:
+            if domain.mx.has_gmail:
+                mx_cell.append("Gmail", style=status_color(domain.mx.status))
+            else:
+                mx_cell.append(
+                    f"{len(domain.mx.mx_records)} records",
+                    style=status_color(domain.mx.status),
+                )
+        else:
+            mx_cell.append(
+                domain.mx.status.value,
+                style=status_color(domain.mx.status),
+            )
+
         table.add_row(
             domain.domain,
             ses_cell,
             dkim_cell,
             spf_cell,
             dmarc_cell,
+            mx_cell,
         )
 
     return table
@@ -264,6 +283,15 @@ def print_domain_details(domain: DomainStatus) -> None:
     if domain.dmarc.current_value:
         console.print(f"    Current: {domain.dmarc.current_value}", style="dim")
 
+    # MX Status
+    console.print(f"  MX: {status_icon(domain.mx.status)} ", end="")
+    console.print(domain.mx.message, style=status_color(domain.mx.status))
+
+    if domain.mx.mx_records:
+        console.print(f"    Servers: {', '.join(domain.mx.mx_records[:3])}", style="dim")
+        if len(domain.mx.mx_records) > 3:
+            console.print(f"    ... and {len(domain.mx.mx_records) - 3} more", style="dim")
+
     # Errors
     if domain.errors:
         console.print()
@@ -298,6 +326,8 @@ def print_summary(report: SetupReport) -> None:
     dkim_ok = sum(1 for d in report.domains if d.dkim.status == Status.SUCCESS)
     spf_ok = sum(1 for d in report.domains if d.spf.status == Status.SUCCESS)
     dmarc_ok = sum(1 for d in report.domains if d.dmarc.status == Status.SUCCESS)
+    mx_ok = sum(1 for d in report.domains if d.mx.status == Status.SUCCESS)
+    mx_gmail = sum(1 for d in report.domains if d.mx.has_gmail)
 
     console.print(Panel(
         f"[bold]Summary:[/bold]\n"
@@ -305,7 +335,9 @@ def print_summary(report: SetupReport) -> None:
         f"  SES Verified: [green]{verified}[/green]/{total}\n"
         f"  DKIM OK: [green]{dkim_ok}[/green]/{total}\n"
         f"  SPF OK: [green]{spf_ok}[/green]/{total}\n"
-        f"  DMARC OK: [green]{dmarc_ok}[/green]/{total}",
+        f"  DMARC OK: [green]{dmarc_ok}[/green]/{total}\n"
+        f"  MX OK: [green]{mx_ok}[/green]/{total} "
+        f"([cyan]{mx_gmail}[/cyan] using Gmail)",
         title="Statistics",
         style="cyan",
     ))

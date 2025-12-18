@@ -100,6 +100,27 @@ class DMARCAuditResult:
 
 
 @dataclass
+class MXAuditResult:
+    """Result of MX record audit for Gmail compatibility."""
+
+    exists: bool
+    has_gmail: bool = False
+    mx_records: list[str] = field(default_factory=list)
+    status: Status = Status.MISSING
+    message: str = ""
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "exists": self.exists,
+            "has_gmail": self.has_gmail,
+            "mx_records": self.mx_records,
+            "status": self.status.value,
+            "message": self.message,
+        }
+
+
+@dataclass
 class DKIMStatus:
     """Status of DKIM configuration for a domain."""
 
@@ -130,6 +151,7 @@ class DomainStatus:
     dkim: DKIMStatus = field(default_factory=DKIMStatus)
     spf: SPFAuditResult = field(default_factory=lambda: SPFAuditResult(exists=False))
     dmarc: DMARCAuditResult = field(default_factory=lambda: DMARCAuditResult(exists=False))
+    mx: MXAuditResult = field(default_factory=lambda: MXAuditResult(exists=False))
     suggested_records: list[DNSRecord] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -144,6 +166,7 @@ class DomainStatus:
             "dkim": self.dkim.to_dict(),
             "spf": self.spf.to_dict(),
             "dmarc": self.dmarc.to_dict(),
+            "mx": self.mx.to_dict(),
             "suggested_records": [r.to_dict() for r in self.suggested_records],
             "errors": self.errors,
         }

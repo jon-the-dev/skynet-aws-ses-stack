@@ -8,6 +8,7 @@ from .models import (
     DMARCAuditResult,
     DNSRecord,
     DomainStatus,
+    MXAuditResult,
     RecordAction,
     Severity,
     SPFAuditResult,
@@ -25,6 +26,16 @@ SPF_ALL_PATTERNS = [
     (r"\s*-all\s*$", "-all"),  # Hard fail
     (r"\s*\+all\s*$", "+all"),  # Pass (dangerous)
     (r"\s*\?all\s*$", "?all"),  # Neutral
+]
+
+# Gmail/Google Workspace MX records (standard SMTP servers)
+# These are the expected MX records for Google Workspace
+GMAIL_MX_SERVERS = [
+    "aspmx.l.google.com",
+    "alt1.aspmx.l.google.com",
+    "alt2.aspmx.l.google.com",
+    "alt3.aspmx.l.google.com",
+    "alt4.aspmx.l.google.com",
 ]
 
 
@@ -294,6 +305,93 @@ def audit_dmarc_record(records: list[dict], domain: str) -> DMARCAuditResult:
     )
 
 
+def audit_mx_record(records: list[dict], domain: str) -> MXAuditResult:
+    """
+    Audit MX records for Gmail/Google Workspace SMTP servers.
+
+    Checks for:
+    - Existence of MX records
+    - Presence of Gmail/Google Workspace MX servers
+
+    Args:
+        records: List of DNS records from Route53
+        domain: The domain name
+
+    Returns:
+        MXAuditResult with current state
+    """
+    # Find MX records for the domain
+    mx_values = []
+    for record in records:
+        if record.get("Type") != "MX":
+            continue
+
+        record_name = record.get("Name", "").rstrip(".")
+        if record_name != domain:
+            continue
+
+        for rr in record.get("ResourceRecords", []):
+            # MX record format: "priority server"
+            value = rr.get("Value", "").strip()
+            if value:
+                # Extract server name (remove priority number)
+                parts = value.split()
+                if len(parts) >= 2:
+                    server = parts[1].rstrip(".").lower()
+                    mx_values.append(server)
+                elif len(parts) == 1:
+                    # Handle case where only server is present
+                    mx_values.append(parts[0].rstrip(".").lower())
+
+    if not mx_values:
+        return MXAuditResult(
+            exists=False,
+            status=Status.MISSING,
+            message="No MX records found. Email delivery will not work.",
+        )
+
+    # Check for Gmail MX servers
+    gmail_servers_found = []
+    for mx in mx_values:
+        for gmail_mx in GMAIL_MX_SERVERS:
+            if gmail_mx.lower() in mx or mx in gmail_mx.lower():
+                gmail_servers_found.append(mx)
+                break
+
+    has_gmail = len(gmail_servers_found) > 0
+
+    if has_gmail:
+        # Check if all primary Gmail MX servers are present
+        primary_gmail = "aspmx.l.google.com"
+        has_primary = any(primary_gmail in mx for mx in mx_values)
+
+        if has_primary and len(gmail_servers_found) >= 2:
+            return MXAuditResult(
+                exists=True,
+                has_gmail=True,
+                mx_records=mx_values,
+                status=Status.SUCCESS,
+                message=f"Gmail MX records configured ({len(gmail_servers_found)} servers).",
+            )
+        else:
+            return MXAuditResult(
+                exists=True,
+                has_gmail=True,
+                mx_records=mx_values,
+                status=Status.WARNING,
+                message="Gmail MX records found but may be incomplete.",
+            )
+
+    # MX records exist but not Gmail
+    return MXAuditResult(
+        exists=True,
+        has_gmail=False,
+        mx_records=mx_values,
+        status=Status.SUCCESS,
+        message=f"MX records found ({len(mx_values)} servers), not using Gmail.",
+    )
+
+
 def audit_domain_dns(
     domain_status: DomainStatus,
     records: list[dict],
@@ -378,6 +476,28 @@ def audit_domain_dns(
             severity=Severity.WARNING,
             message=dmarc_result.message,
             recommendation="Consider upgrading to p=quarantine or p=reject",
+        ))
+
+    # Audit MX records
+    mx_result = audit_mx_record(records, domain)
+    domain_status.mx = mx_result
+
+    if mx_result.status == Status.MISSING:
+        findings.append(AuditFinding(
+            domain=domain,
+            category="MX",
+            severity=Severity.ERROR,
+            message="No MX records found.",
+            recommendation="Add MX records for email delivery.",
+        ))
+
+    elif mx_result.status == Status.WARNING:
+        findings.append(AuditFinding(
+            domain=domain,
+            category="MX",
+            severity=Severity.WARNING,
+            message=mx_result.message,
+            recommendation="Review MX record configuration.",
         ))
 
     return domain_status, findings
