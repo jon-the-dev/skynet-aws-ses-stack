@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 from typing import Any
 
 import boto3
@@ -19,6 +20,34 @@ AWS_SES_REGION = os.environ.get("AWS_SES_REGION", "us-east-1")
 
 # Initialize SES client
 ses_client = boto3.client("ses", region_name=AWS_SES_REGION)
+
+# Email validation regex
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
+# Characters to strip from header values to prevent injection
+HEADER_INJECTION_CHARS = re.compile(r"[<>\r\n\x00-\x1f]")
+
+
+def _sanitize_header_value(value: str, max_length: int = 100) -> str:
+    """
+    Sanitize a string for safe use in email headers.
+
+    Removes characters that could enable header injection attacks:
+    - Newlines (\\r, \\n) - prevent header injection
+    - Control characters (\\x00-\\x1f) - prevent escape sequences
+    - Angle brackets (<, >) - prevent email address spoofing
+    """
+    if not value:
+        return ""
+    sanitized = HEADER_INJECTION_CHARS.sub("", value)
+    return sanitized[:max_length].strip()
+
+
+def _validate_email(email: str) -> bool:
+    """Validate email format to prevent injection and malformed addresses."""
+    if not email:
+        return False
+    return bool(EMAIL_REGEX.match(email)) and len(email) <= 254
 
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -50,16 +79,25 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         logger.error(f"Invalid JSON in request body: {e}")
         return _response(400, {"error": "Invalid JSON in request body"})
 
-    # Validate required fields
-    subject = body.get("subject")
+    # Validate and sanitize required fields
+    subject_raw = body.get("subject")
     message = body.get("message")
 
-    if not subject or not message:
+    if not subject_raw or not message:
         return _response(400, {"error": "Missing required fields: subject and message"})
 
-    # Optional fields
-    from_name = body.get("from_name", "Contact Form")
-    from_email = body.get("from_email", "")
+    # Sanitize subject to prevent header injection
+    subject = _sanitize_header_value(subject_raw, max_length=200)
+    if not subject:
+        return _response(400, {"error": "Missing required fields: subject and message"})
+
+    # Optional fields with sanitization to prevent header injection
+    from_name = _sanitize_header_value(body.get("from_name", ""), max_length=100)
+    if not from_name:
+        from_name = "Contact Form"
+
+    from_email_raw = body.get("from_email", "")
+    from_email = from_email_raw if _validate_email(from_email_raw) else ""
 
     # Build email content
     email_body = f"""

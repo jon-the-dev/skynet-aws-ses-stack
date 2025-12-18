@@ -17,4 +17,4 @@ mypy = "*"
 boto3-stubs = {extras = ["ses", "route53"], version = "*"}
 
 [requires]
-python_version = "3.14"
+python_version = "3.11"
